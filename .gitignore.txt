@@ -1,4 +1,4 @@
-homework2.pdf
+*.pdf
 Makefile
 practice
 practice.c
