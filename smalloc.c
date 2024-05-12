@@ -29,13 +29,8 @@ void* smalloc (size_t s)
 		smlist->next = NULL;
 
 		current = smlist;
-
-		/************* for debug *************/
-		printf("[for debug] smlist: %p\n", smlist);
-		/************* for debug *************/
 	}
 
-	// 주소 592씩 증가(이상함)
 	while(current) // data header list의 마지막 data header까지 반복
 	{
 		if(current->used == 0 && current->size >= s) // data region이 unused이면서 size가 s 이상일 경우 선택
@@ -47,11 +42,11 @@ void* smalloc (size_t s)
 				current->size = s;
 				current->used = 1;
 
-				base_address = (void* )current + sizeof(smheader);
+				base_address = (void*)current + sizeof(smheader); // **주소 연산**
 
 				smheader_ptr old_next = current->next;
 
-				current->next = base_address + current->size;
+				current->next = base_address + current->size; // **주소 연산**
 
 				(current->next)->size = old_size - current->size - sizeof(smheader);
 				(current->next)->used = 0;
@@ -62,7 +57,7 @@ void* smalloc (size_t s)
 			else // size가 s ~ s + 24일 경우
 			{
 				current->used = 1;
-				base_address = current + sizeof(smheader);
+				base_address = (void*)current + sizeof(smheader); // **주소 연산**
 				return base_address;
 			}
 		}
@@ -104,10 +99,10 @@ void* smalloc (size_t s)
 
 		current->size = s;
 		current->used = 1;
-		base_address = current + sizeof(smheader);
+		base_address = (void*)current + sizeof(smheader); // **주소 연산**
 
 		smheader_ptr old_next2 = current->next;
-		current->next = current + sizeof(smheader) + current->size;
+		current->next = base_address + current->size; // **주소 연산**
 		(current->next)->size = old_size2 - current->size - sizeof(smheader);
 		(current->next)->used = 0;
 		(current->next)->next = old_next2;
@@ -117,7 +112,7 @@ void* smalloc (size_t s)
 	else // size가 s ~ s + 24일 경우
 	{
 		current->used = 1;
-		base_address = current + sizeof(smheader);
+		base_address = (void*)current + sizeof(smheader); // **주소 연산**
 
 		return base_address;
 	}
