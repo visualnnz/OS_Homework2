@@ -65,7 +65,7 @@ void* smalloc (size_t s)
 		{
 			break;
 		}
-		current = current->next; // smlist가 다음 data header를 가리키도록함
+		current = current->next; // current가 다음 data header를 가리키도록함
 	}
 
 	// 탐색한 모든 unused data region의 메모리 공간들이 요청된 메모리 공간 s보다 부족할 경우
@@ -124,9 +124,32 @@ void* smalloc_mode (size_t s, smmode m)
 	return 0x0 ;
 }
 
-void sfree (void * p) 
+void sfree (void* p) 
 {
 	// TODO
+	void* base_address = NULL;
+	current = smlist;
+
+	while(current) // p가 가리키는 주소와 smlist 내에서 data region을 가리키는 주소들 중에 일치하는게 있는지 확인
+	{
+		base_address = (void*)current + sizeof(smheader); // **주소연산**
+		if(base_address == p)
+		{
+			break;
+		}
+		else
+		{
+			if(current->next == NULL) // 마지막 data region까지 탐색해도 p가 가리키는 주소와 일치하는 주소가 없으면 abort()
+			{
+				abort();
+			}
+			current = current->next;
+		}
+	}
+
+	smheader_ptr header = p - sizeof(smheader); // **주소연산**
+
+	header->used = 0;
 
 }
 
