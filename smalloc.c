@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 
 smheader_ptr smlist = 0x0;
+smheader_ptr current = 0x0;
 
 void* smalloc (size_t s) 
 {
@@ -26,40 +27,55 @@ void* smalloc (size_t s)
 		smlist->size = page_size - sizeof(smheader);
 		smlist->used = 0;
 		smlist->next = NULL;
+
+		current = smlist;
+
+		/************* for debug *************/
+		printf("[for debug] smlist: %p\n", smlist);
+		/************* for debug *************/
 	}
 
-	while(smlist) // data header list의 마지막 data header까지 반복
+	// 주소 592씩 증가(이상함)
+	while(current) // data header list의 마지막 data header까지 반복
 	{
-		if(smlist->used == 0 && smlist->size >= s) // data region이 unused이면서 size가 s 이상일 경우 선택
+		if(current->used == 0 && current->size >= s) // data region이 unused이면서 size가 s 이상일 경우 선택
 		{
-			if(smlist->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
+			if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 			{
-				size_t old_size = smlist->size;
+				size_t old_size = current->size;
 
-				smlist->size = s;
-				smlist->used = 1;
-				base_address = smlist + sizeof(smheader);
+				current->size = s;
+				current->used = 1;
+				/************* for debug *************/
+				printf("[for debug] current: %p\n", current);
+				base_address = (void* )current + sizeof(smheader); // <!> 문제 발생: 주소가 0x240씩 증가됨 (sizeof(smheader))
+				/************* for debug *************/
+				printf("[for debug] base_address: %p\n", base_address);
 
-				smheader_ptr old_next = smlist->next;
-				smlist->next = base_address + smlist->size; // 문제 발생 의심(주소 연산)
-				(smlist->next)->size = old_size - smlist->size - sizeof(smheader);
-				(smlist->next)->used = 0;
-				(smlist->next)->next = old_next;
+				smheader_ptr old_next = current->next;
+
+				current->next = base_address + current->size;
+				/************* for debug *************/
+				printf("[for debug] (AFTER)current->next: %p\n", current->next);
+
+				(current->next)->size = old_size - current->size - sizeof(smheader);
+				(current->next)->used = 0;
+				(current->next)->next = old_next;
 
 				return base_address;
 			}
 			else // size가 s ~ s + 24일 경우
 			{
-				smlist->used = 1;
-				base_address = smlist + sizeof(smheader);
+				current->used = 1;
+				base_address = current + sizeof(smheader);
 				return base_address;
 			}
 		}
-		if(smlist->next == NULL) // smlist가 가리키는게 마지막 data header일 경우
+		if(current->next == NULL) // current가 가리키는게 마지막 data header일 경우
 		{
 			break;
 		}
-		smlist = smlist->next; // smlist가 다음 data header를 가리키도록함
+		current = current->next; // smlist가 다음 data header를 가리키도록함
 	}
 
 	// 탐색한 모든 unused data region의 메모리 공간들이 요청된 메모리 공간 s보다 부족할 경우
@@ -71,42 +87,42 @@ void* smalloc (size_t s)
 		num_page++;
 	}
 
-	smlist->next = (smheader_ptr)mmap(smlist + sizeof(smheader) + smlist->size, num_page * page_size, 
+	current->next = (smheader_ptr)mmap(current + sizeof(smheader) + current->size, num_page * page_size, 
 	PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
 
-	if (smlist->next == MAP_FAILED) 
+	if (current->next == MAP_FAILED) 
 	{
-		perror("smlist->next mmap");
+		perror("current->next mmap");
 		exit(EXIT_FAILURE);
     }
 
-	smlist = smlist->next;
+	current = current->next;
 
-	smlist->size = (num_page * page_size) - sizeof(smheader);
-	smlist->used = 0;
-	smlist->next = NULL;
+	current->size = (num_page * page_size) - sizeof(smheader);
+	current->used = 0;
+	current->next = NULL;
 
 	// 위 while 문에 있던 로직 재사용
-	if(smlist->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
+	if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 	{
-		size_t old_size2 = smlist->size;
+		size_t old_size2 = current->size;
 
-		smlist->size = s;
-		smlist->used = 1;
-		base_address = smlist + sizeof(smheader);
+		current->size = s;
+		current->used = 1;
+		base_address = current + sizeof(smheader);
 
-		smheader_ptr old_next2 = smlist->next;
-		smlist->next = smlist + sizeof(smheader) + smlist->size;
-		(smlist->next)->size = old_size2 - smlist->size - sizeof(smheader);
-		(smlist->next)->used = 0;
-		(smlist->next)->next = old_next2;
+		smheader_ptr old_next2 = current->next;
+		current->next = current + sizeof(smheader) + current->size;
+		(current->next)->size = old_size2 - current->size - sizeof(smheader);
+		(current->next)->used = 0;
+		(current->next)->next = old_next2;
 
 		return base_address;
 	}
 	else // size가 s ~ s + 24일 경우
 	{
-		smlist->used = 1;
-		base_address = smlist + sizeof(smheader);
+		current->used = 1;
+		base_address = current + sizeof(smheader);
 
 		return base_address;
 	}
