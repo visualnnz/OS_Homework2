@@ -11,7 +11,7 @@ smheader_ptr current = 0x0;
 void* smalloc (size_t s) 
 {
 	// TODO
-	void* base_address = NULL;
+	void* base_address = NULL; // data region 시작 주소
 	size_t page_size = (size_t)getpagesize(); // 4096
 	
 	if(smlist == 0x0) // data header list가 smlist에 존재하지 않을 경우
@@ -37,20 +37,8 @@ void* smalloc (size_t s)
 		{
 			if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 			{
-				size_t old_size = current->size;
-
-				current->size = s;
-				current->used = 1;
-
 				base_address = (void*)current + sizeof(smheader); // **주소 연산**
-
-				smheader_ptr old_next = current->next;
-
-				current->next = base_address + current->size; // **주소 연산**
-
-				(current->next)->size = old_size - current->size - sizeof(smheader);
-				(current->next)->used = 0;
-				(current->next)->next = old_next;
+				SplitMemory(s, base_address);
 
 				return base_address;
 			}
@@ -95,17 +83,8 @@ void* smalloc (size_t s)
 	// 위 while 문에 있던 로직 재사용
 	if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 	{
-		size_t old_size2 = current->size;
-
-		current->size = s;
-		current->used = 1;
 		base_address = (void*)current + sizeof(smheader); // **주소 연산**
-
-		smheader_ptr old_next2 = current->next;
-		current->next = base_address + current->size; // **주소 연산**
-		(current->next)->size = old_size2 - current->size - sizeof(smheader);
-		(current->next)->used = 0;
-		(current->next)->next = old_next2;
+		SplitMemory(s, base_address);
 
 		return base_address;
 	}
@@ -121,13 +100,17 @@ void* smalloc (size_t s)
 void* smalloc_mode (size_t s, smmode m)
 {
 	// TODO
-	return 0x0 ;
+	switch(m)
+	{
+		case bestfit:
+		
+	}
 }
 
 void sfree (void* p) 
 {
 	// TODO
-	void* base_address = NULL;
+	void* base_address = NULL; // data region 시작 주소
 	current = smlist;
 
 	while(current) // p가 가리키는 주소와 smlist 내에서 data region을 가리키는 주소들 중에 일치하는게 있는지 확인
@@ -150,7 +133,6 @@ void sfree (void* p)
 	smheader_ptr header = p - sizeof(smheader); // **주소연산**
 
 	header->used = 0;
-
 }
 
 void* srealloc (void * p, size_t s) 
@@ -204,4 +186,23 @@ void smdump ()
 		i++;
 	}
 	printf("\n");
+}
+
+// 메모리 영역 분할 함수
+void SplitMemory(size_t s, void* base_address)
+{
+	size_t old_size = current->size;
+
+	current->size = s;
+	current->used = 1;
+
+	base_address = (void*)current + sizeof(smheader); // **주소 연산**
+
+	smheader_ptr old_next = current->next;
+
+	current->next = base_address + current->size; // **주소 연산**
+
+	(current->next)->size = old_size - current->size - sizeof(smheader);
+	(current->next)->used = 0;
+	(current->next)->next = old_next;
 }

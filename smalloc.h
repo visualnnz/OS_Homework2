@@ -23,3 +23,5 @@ void * srealloc (void * p, size_t s) ;
 void smcoalesce () ;
 
 void smdump () ;
+
+void SplitMemory(size_t s, void* base_address); // 메모리 영역 분할 함수
