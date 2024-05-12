@@ -46,17 +46,12 @@ void* smalloc (size_t s)
 
 				current->size = s;
 				current->used = 1;
-				/************* for debug *************/
-				printf("[for debug] current: %p\n", current);
-				base_address = (void* )current + sizeof(smheader); // <!> 문제 발생: 주소가 0x240씩 증가됨 (sizeof(smheader))
-				/************* for debug *************/
-				printf("[for debug] base_address: %p\n", base_address);
+
+				base_address = (void* )current + sizeof(smheader);
 
 				smheader_ptr old_next = current->next;
 
 				current->next = base_address + current->size;
-				/************* for debug *************/
-				printf("[for debug] (AFTER)current->next: %p\n", current->next);
 
 				(current->next)->size = old_size - current->size - sizeof(smheader);
 				(current->next)->used = 0;
