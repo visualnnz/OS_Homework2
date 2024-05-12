@@ -24,4 +24,4 @@ void smcoalesce () ;
 
 void smdump () ;
 
-void SplitMemory(size_t s, void* base_address); // 메모리 영역 분할 함수
+void SplitMemory(size_t s, void* base_address, smheader_ptr current); // 메모리 영역 분할 함수

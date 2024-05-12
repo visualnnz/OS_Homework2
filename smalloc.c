@@ -38,7 +38,7 @@ void* smalloc (size_t s)
 			if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 			{
 				base_address = (void*)current + sizeof(smheader); // **주소 연산**
-				SplitMemory(s, base_address);
+				SplitMemory(s, base_address, current);
 
 				return base_address;
 			}
@@ -84,7 +84,7 @@ void* smalloc (size_t s)
 	if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 	{
 		base_address = (void*)current + sizeof(smheader); // **주소 연산**
-		SplitMemory(s, base_address);
+		SplitMemory(s, base_address, current);
 
 		return base_address;
 	}
@@ -100,10 +100,97 @@ void* smalloc (size_t s)
 void* smalloc_mode (size_t s, smmode m)
 {
 	// TODO
-	switch(m)
+	void* base_address = NULL; // data region 시작 주소
+
+	smheader_ptr target = NULL; // 특정 조건(bestfit, worstfit, firstfit)을 만족하는 빈 공간의 헤더 포인터
+
+	size_t target_size = 0;
+
+	current = smlist;
+	while(current)
 	{
-		case bestfit:
-		
+		switch(m)
+		{
+			case bestfit:
+				if(current->used == 0 && current->size >= s)
+				{
+					if(target_size < s) // 최초로 탐색된 s 이상의 메모리 공간일 경우
+					{
+						target_size = current->size;
+						target = current;
+					}
+					else
+					{
+						if(current->size < target_size)
+						{
+							target_size = current->size;
+							target = current;
+						}
+					}
+				}
+			break;
+			case worstfit:
+				if(current->used == 0 && current->size >= s)
+				{
+					if(target_size < s) // 최초로 탐색된 s 이상의 메모리 공간일 경우
+					{
+						target_size = current->size;
+						target = current;
+					}
+					else
+					{
+						if(current->size > target_size)
+						{
+							target_size = current->size;
+							target = current;
+						}
+					}
+				}
+			break;
+			case firstfit:
+				if(current->used == 0 && current->size >= s)
+				{
+					target_size = current->size;
+
+					if(target_size > s + 24) // target_size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
+					{
+						base_address = (void*)target + sizeof(smheader); // **주소 연산**
+						SplitMemory(s, base_address, target);
+
+						return base_address;
+					}
+					else // target_size가 s ~ s + 24일 경우
+					{
+						target->used = 1;
+						base_address = (void*)target + sizeof(smheader); // **주소 연산**
+						return base_address;
+					}
+				}
+			break;
+		}
+		if(current->next = NULL) // current가 가리키는게 마지막 data header일 경우
+		{
+			break;
+		}
+		current = current->next;
+	}
+
+	if(target_size > s + 24) // target_size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
+	{
+		base_address = (void*)target + sizeof(smheader); // **주소 연산**
+		SplitMemory(s, base_address, target);
+
+		return base_address;
+	}
+	else if(target_size >= s && target_size <= s + 24)// target_size가 s ~ s + 24일 경우
+	{
+		target->used = 1;
+		base_address = (void*)target + sizeof(smheader); // **주소 연산**
+		return base_address;
+	}
+	else // size가 s 이상인 적절한 빈 공간을 찾지 못했을 경우
+	{
+		return smalloc(s);
 	}
 }
 
@@ -189,7 +276,7 @@ void smdump ()
 }
 
 // 메모리 영역 분할 함수
-void SplitMemory(size_t s, void* base_address)
+void SplitMemory(size_t s, void* base_address, smheader_ptr current)
 {
 	size_t old_size = current->size;
 
