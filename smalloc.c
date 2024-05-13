@@ -2,17 +2,18 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include "smalloc.h"
 #include <sys/mman.h>
 
 smheader_ptr smlist = 0x0;
 smheader_ptr current = 0x0;
 
-void* smalloc (size_t s) 
+void* smalloc (size_t s)
 {
 	// TODO
 	void* base_address = NULL; // data region 시작 주소
-	size_t page_size = (size_t)getpagesize(); // 4096
+	const size_t page_size = (size_t)getpagesize(); // 4096
 	
 	if(smlist == 0x0) // data header list가 smlist에 존재하지 않을 경우
 	{
@@ -72,7 +73,7 @@ void* smalloc (size_t s)
 
 	// 현재(마지막 data region)current가 가리키는 메모리 영역 끝에 mmap을 통해 할당받은 메모리 공간 이어 붙이기
 	new_address = mmap((void *)current + sizeof(smheader) + current->size, new_size, 
-	PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0); // (!)문제 발생: 주소 연산
+	PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
 
 	if (new_address == MAP_FAILED) 
 	{
@@ -105,67 +106,76 @@ void* smalloc_mode (size_t s, smmode m)
 	size_t target_size = 0;
 
 	current = smlist;
+
+	int i = 1; // for debug 1
 	while(current)
 	{
-		switch(m)
+		if(m == bestfit)
 		{
-			case bestfit:
-				if(current->used == 0 && current->size >= s)
-				{
-					if(target_size < s) // 최초로 탐색된 s 이상의 메모리 공간일 경우
-					{
-						target_size = current->size;
-						target = current;
-					}
-					else
-					{
-						if(current->size < target_size)
-						{
-							target_size = current->size;
-							target = current;
-						}
-					}
-				}
-			break;
-			case worstfit:
-				if(current->used == 0 && current->size >= s)
-				{
-					if(target_size < s) // 최초로 탐색된 s 이상의 메모리 공간일 경우
-					{
-						target_size = current->size;
-						target = current;
-					}
-					else
-					{
-						if(current->size > target_size)
-						{
-							target_size = current->size;
-							target = current;
-						}
-					}
-				}
-			break;
-			case firstfit:
-				if(current->used == 0 && current->size >= s)
+			if(current->used == 0 && current->size >= s)
+			{
+				if(target_size < s) // 최초로 탐색된 s 이상의 메모리 공간일 경우
 				{
 					target_size = current->size;
-
-					if(target_size > s + 24) // target_size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
+					target = current;
+				}
+				else
+				{
+					if(current->size < target_size)
 					{
-						base_address = (void*)target + sizeof(smheader); // **주소 연산**
-						SplitExistingMemory(s, base_address, target);
-
-						return base_address;
-					}
-					else // target_size가 s ~ s + 24일 경우
-					{
-						target->used = 1;
-						base_address = (void*)target + sizeof(smheader); // **주소 연산**
-						return base_address;
+						target_size = current->size;
+						target = current;
 					}
 				}
-			break;
+			}
+			printf("%d. target_size: %ld\n", i, target_size); // for debug 2
+			i++;
+			printf("%d. current: %p\n", i, current); // for debug 3
+			i++;
+			printf("%d. smlist: %p\n", i, smlist); // for debug 4
+			i++;
 		}
+		else if(m == worstfit)
+		{
+			if(current->used == 0 && current->size >= s)
+			{
+				if(target_size < s) // 최초로 탐색된 s 이상의 메모리 공간일 경우
+				{
+					target_size = current->size;
+					target = current;
+				}
+				else
+				{
+					if(current->size > target_size)
+					{
+						target_size = current->size;
+						target = current;
+					}
+				}
+			}
+		}
+		else
+		{
+			if(current->used == 0 && current->size >= s)
+			{
+				target_size = current->size;
+
+				if(target_size > s + 24) // target_size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
+				{
+					base_address = (void*)target + sizeof(smheader); // **주소 연산**
+					SplitExistingMemory(s, base_address, target);
+
+					return base_address;
+				}
+				else // target_size가 s ~ s + 24일 경우
+				{
+					target->used = 1;
+					base_address = (void*)target + sizeof(smheader); // **주소 연산**
+					return base_address;
+				}
+			}
+		}
+		
 		if(current->next = NULL) // current가 가리키는게 마지막 data header일 경우
 		{
 			break;
@@ -186,7 +196,7 @@ void* smalloc_mode (size_t s, smmode m)
 		base_address = (void*)target + sizeof(smheader); // **주소 연산**
 		return base_address;
 	}
-	else // size가 s 이상인 적절한 빈 공간을 찾지 못했을 경우
+	else // size가 s 이상인 적절한 빈 공간을 찾지 못했을 경우(mmap을 통해 새 메모리를 할당 받아야 하는 경우)
 	{
 		return smalloc(s);
 	}
@@ -220,10 +230,174 @@ void sfree (void* p)
 	header->used = 0;
 }
 
-void* srealloc (void * p, size_t s) 
+void* srealloc (void* p, size_t s) 
 {
 	// TODO
-	return 0x0 ; // erase this 
+	smheader_ptr header = (void *)p - sizeof(smheader); // **주소연산**
+	smheader_ptr prev = NULL;
+	void *prev_base_address = NULL;
+	smheader_ptr next = header->next;
+
+	size_t total_size = 0;
+
+	if(header == NULL)
+	{
+		abort();
+	}
+
+	if(header->size > s) // data region을 축소하는 경우
+	{
+		SplitExistingMemory(s, p, header);
+		return NULL;
+	}
+	else if(header->size < s) // data region을 확장하는 경우
+	{
+		if(header == smlist)
+		{
+			if(next->used == 0)
+			{
+				total_size = header->size + (sizeof(smheader) + next->size);
+
+				if(total_size >= s)
+				{
+					next->size = 0;
+
+					header->size = total_size;
+					header->next = next->next;
+					next->next = NULL;
+
+					if(header->size > s + 24)
+					{
+						SplitExistingMemory(s, p, header);
+					}
+				}
+				else // mmap으로 새 메모리 영역 할당받고 마지막 메모리 영역 다음으로 추가
+				{
+					InsertEndMemory(s);
+				}
+			}
+			else
+			{
+				InsertEndMemory(s);
+			}
+			return NULL;
+		}
+
+		// header의 바로 앞에있는 메모리 영역의 data header 찾아서 prev에 주소 저장
+		prev = smlist;
+
+		while(prev->next != header && prev->next != NULL)
+		{
+			prev = prev->next;
+		}
+
+		if(prev->next == NULL)
+		{
+			perror("prev in srealloc");
+			exit(EXIT_FAILURE);
+		}
+
+		if(prev->used == 0 && next->used == 0) // prev, next 둘다 메모리 병합 가능한 경우
+		{
+			total_size = prev->size + (sizeof(smheader) + header->size) + (sizeof(smheader) + next->size);
+
+			if(total_size >= s)
+			{
+				// prev와 header 병합 후 header의 data region 내용을 prev의 data region으로 복사
+				header->used = 0;
+				header->next = NULL;
+				prev->used = 1;
+				prev->size = prev->size + (sizeof(smheader) + header->size);
+				prev->next = next;
+
+				prev_base_address = (void *)prev + sizeof(smheader);
+				memcpy(prev_base_address, p, header->size);
+
+				// prev와 next 병합
+				next->size = 0;
+
+				prev->size = prev->size + (sizeof(smheader) + next->size);
+				prev->next = next->next;
+				next->next = NULL;
+
+				p = prev_base_address;
+
+				if(total_size > s + 24)
+				{
+					SplitExistingMemory(s, p, prev);
+				}
+			}
+			else // mmap으로 새 메모리 영역 할당받고 마지막 메모리 영역 다음으로 추가
+			{
+				InsertEndMemory(s);
+			}
+			return NULL;
+		}
+		else if(prev->used == 1 && next->used == 0) // next만 메모리 병합 가능한 경우
+		{
+			total_size = header->size + (sizeof(smheader) + next->size);
+
+			if(total_size >= s)
+			{
+				next->size = 0;
+
+				header->size = total_size;
+				header->next = next->next;
+				next->next = NULL;
+
+				if(header->size > s + 24)
+				{
+					SplitExistingMemory(s, p, header);
+				}
+			}
+			else // mmap으로 새 메모리 영역 할당받고 마지막 메모리 영역 다음으로 추가
+			{
+				InsertEndMemory(s);
+			}
+			return NULL;
+		}
+		else if(prev->used == 0 && next->used == 1) // prev만 메모리 병합 가능한 경우
+		{
+			total_size = prev->size + (sizeof(smheader) + header->size);
+
+			if(total_size >= s)
+			{
+				header->used = 0;
+			
+				prev->used = 1;
+				prev->size = total_size;
+				prev->next = header->next;
+
+				header->next = NULL;
+
+				prev_base_address = (void *)prev + sizeof(smheader);
+				memcpy(prev_base_address, p, header->size);
+
+				p = prev_base_address;
+
+				if(prev->size > s + 24)
+				{
+					SplitExistingMemory(s, p, prev);
+				}
+			}
+			else // mmap으로 새 메모리 영역 할당받고 마지막 메모리 영역 다음으로 추가
+			{
+				InsertEndMemory(s);
+			}
+			return NULL;
+		}
+		else // prev, next 둘다 메모리 병합 불가능한 경우
+		{
+			InsertEndMemory(s);
+			return NULL;
+		}
+	}
+	else // header->size == s인 경우(축소도 확장도 아닌 경우)
+	{
+		printf("Choose other data size except for %ld\n", header->size);
+		return NULL;
+	}
+	return NULL;
 }
 
 void smcoalesce ()
@@ -296,13 +470,43 @@ void SplitNewMemory(size_t s, size_t new_size, smheader_ptr new_address, smheade
 	new_address->used = 1;
 	new_address->next = (void *)base_address + new_address->size;
 
-	(new_address->next)->size = new_size - (new_address->size + sizeof(smheader));
+	(new_address->next)->size = new_size - (sizeof(smheader) + new_address->size + sizeof(smheader));
 	(new_address->next)->used = 0;
 	(new_address->next)->next = old_next;
 }
 
+// 마지막 메모리 영역 다음으로 새로 할당받은 메모리 영역 추가하는 함수
+void InsertEndMemory(size_t s)
+{
+	size_t num_page = 0;
+	const size_t page_size = (size_t)getpagesize(); // 4096
+	size_t new_size = 0;
+	smheader_ptr new_address = NULL;
+	smheader_ptr last_header = NULL;
+
+	num_page = (s / page_size) + 1;
+
+	if((num_page * page_size) - sizeof(smheader) < s)
+	{
+		num_page++;
+	}
+	new_size = num_page * page_size;
+
+	new_address = mmap((void *)current + sizeof(smheader) + current->size, new_size, 
+	PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+
+	// 마지막 메모리 영역 탐색하고 last_header에 해당 data header 주소 저장
+	last_header = smlist;
+	while(last_header->next != NULL)
+	{
+		last_header = last_header->next;
+	}
+
+	SplitNewMemory(s, new_size, new_address, last_header);
+}
+
 // unused data region 병합 함수(추후 로직 재구성 예정)
-void MergeMemory(size_t s, size_t old_size2, void* base_address, smheader_ptr current, smheader_ptr new_address)
+void MergeUnused(size_t s, size_t old_size2, void* base_address, smheader_ptr current, smheader_ptr new_address)
 {
 	// old_size = old_size2 + num_page * page_size
 	size_t old_size = current->size;
