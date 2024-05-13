@@ -27,9 +27,9 @@ void* smalloc (size_t s)
 		smlist->size = page_size - sizeof(smheader);
 		smlist->used = 0;
 		smlist->next = NULL;
+	}
 
 		current = smlist;
-	}
 
 	while(current) // data header list의 마지막 data header까지 반복
 	{
@@ -38,7 +38,7 @@ void* smalloc (size_t s)
 			if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 			{
 				base_address = (void*)current + sizeof(smheader); // **주소 연산**
-				SplitMemory(s, base_address, current);
+				SplitExistingMemory(s, base_address, current);
 
 				return base_address;
 			}
@@ -65,36 +65,34 @@ void* smalloc (size_t s)
 		num_page++;
 	}
 
-	current->next = (smheader_ptr)mmap(current + sizeof(smheader) + current->size, num_page * page_size, 
-	PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+	size_t new_size = num_page * page_size;
 
-	if (current->next == MAP_FAILED) 
+	// mmap으로 새로운 메모리 공간을 할당 받을 때 새 메모리 영역의 시작 주소를 저장하는 헤더 포인터
+	smheader_ptr new_address = NULL;
+
+	// 현재(마지막 data region)current가 가리키는 메모리 영역 끝에 mmap을 통해 할당받은 메모리 공간 이어 붙이기
+	new_address = mmap((void *)current + sizeof(smheader) + current->size, new_size, 
+	PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0); // (!)문제 발생: 주소 연산
+
+	if (new_address == MAP_FAILED) 
 	{
 		perror("current->next mmap");
 		exit(EXIT_FAILURE);
     }
 
-	current = current->next;
+	base_address = (void*)new_address + sizeof(smheader); // **주소 연산**
+	SplitNewMemory(s, new_size, new_address, current);
 
-	current->size = (num_page * page_size) - sizeof(smheader);
-	current->used = 0;
-	current->next = NULL;
+	/** 메모리 병합 로직에서 다시 사용 예정**/
 
-	// 위 while 문에 있던 로직 재사용
-	if(current->size > s + 24) // unused data region의 size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
-	{
-		base_address = (void*)current + sizeof(smheader); // **주소 연산**
-		SplitMemory(s, base_address, current);
+	// 새 메모리 영역을 추가 할당받기 전 기존 메모리 영역의 data region 크기
+	// size_t old_size2 = current->size;
 
-		return base_address;
-	}
-	else // size가 s ~ s + 24일 경우
-	{
-		current->used = 1;
-		base_address = (void*)current + sizeof(smheader); // **주소 연산**
+	// current->size = current->size + num_page * page_size; // current->size를 할당 받은 메모리 공간 만큼 더해서 갱신
+	// base_address = (void*)current + sizeof(smheader); // **주소 연산**
+	// SplitNewMemory(s, old_size2, base_address, current, new_address);
 
-		return base_address;
-	}
+	return base_address;
 }
 
 void* smalloc_mode (size_t s, smmode m)
@@ -155,7 +153,7 @@ void* smalloc_mode (size_t s, smmode m)
 					if(target_size > s + 24) // target_size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 					{
 						base_address = (void*)target + sizeof(smheader); // **주소 연산**
-						SplitMemory(s, base_address, target);
+						SplitExistingMemory(s, base_address, target);
 
 						return base_address;
 					}
@@ -178,7 +176,7 @@ void* smalloc_mode (size_t s, smmode m)
 	if(target_size > s + 24) // target_size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
 	{
 		base_address = (void*)target + sizeof(smheader); // **주소 연산**
-		SplitMemory(s, base_address, target);
+		SplitExistingMemory(s, base_address, target);
 
 		return base_address;
 	}
@@ -239,7 +237,7 @@ void smdump ()
 
 	printf("==================== used memory slots ====================\n");
 	int i = 0;
-	for (itr = smlist; itr != 0x0; itr = itr->next) {
+	for (itr = smlist; itr != 0x0; itr = itr->next, i++) {
 		if (itr->used == 0)
 			continue;
 
@@ -251,14 +249,12 @@ void smdump ()
 			printf("%02x ", s[j]);
 		}
 		printf("\n");
-		printf("[%d]itr->next: %p\n", i, itr->next); // for debug
-		i++;
 	}
 	printf("\n");
 
 	printf("==================== unused memory slots ====================\n") ;
 	i = 0;
-	for (itr = smlist ; itr != 0x0 ; itr = itr->next, i++) {
+	for (itr = smlist; itr != 0x0; itr = itr->next, i++) {
 		if (itr->used == 1)
 			continue ;
 
@@ -270,24 +266,55 @@ void smdump ()
 			printf("%02x ", s[j]);
 		}
 		printf("\n");
-		i++;
 	}
 	printf("\n");
 }
-
-// 메모리 영역 분할 함수
-void SplitMemory(size_t s, void* base_address, smheader_ptr current)
+// 기존 메모리 영역 분할 함수
+void SplitExistingMemory(size_t s, void* base_address, smheader_ptr current)
 {
+	size_t old_size = current->size;
+	smheader_ptr old_next = current->next;
+
+	current->size = s;
+	current->used = 1;
+	current->next = (void *)base_address + current->size; // **주소 연산**
+
+	(current->next)->size = old_size - (current->size + sizeof(smheader));
+	(current->next)->used = 0;
+	(current->next)->next = old_next;
+}
+
+// 메모리 영역을 새로 할당받을 경우의 메모리 영역 분할 함수
+void SplitNewMemory(size_t s, size_t new_size, smheader_ptr new_address, smheader_ptr current)
+{
+	void* base_address = (void *)new_address + sizeof(smheader);
+	smheader_ptr old_next = current->next;
+
+	current->next = new_address;
+
+	new_address->size = s;
+	new_address->used = 1;
+	new_address->next = (void *)base_address + new_address->size;
+
+	(new_address->next)->size = new_size - (new_address->size + sizeof(smheader));
+	(new_address->next)->used = 0;
+	(new_address->next)->next = old_next;
+}
+
+// unused data region 병합 함수(추후 로직 재구성 예정)
+void MergeMemory(size_t s, size_t old_size2, void* base_address, smheader_ptr current, smheader_ptr new_address)
+{
+	// old_size = old_size2 + num_page * page_size
 	size_t old_size = current->size;
 
 	current->size = s;
 	current->used = 1;
 
-	base_address = (void*)current + sizeof(smheader); // **주소 연산**
+	base_address = (void *)current + sizeof(smheader); // **주소 연산**
 
 	smheader_ptr old_next = current->next;
 
-	current->next = base_address + current->size; // **주소 연산**
+	current->next = (void *)new_address + (current->size - old_size2); // **주소 연산**
 
 	(current->next)->size = old_size - current->size - sizeof(smheader);
 	(current->next)->used = 0;

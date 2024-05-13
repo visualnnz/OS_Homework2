@@ -24,4 +24,8 @@ void smcoalesce () ;
 
 void smdump () ;
 
-void SplitMemory(size_t s, void* base_address, smheader_ptr current); // 메모리 영역 분할 함수
+// 기존 메모리 영역 분할 함수
+void SplitExistingMemory(size_t s, void* base_address, smheader_ptr current);
+
+// mmap으로 새로 할당 받은 메모리 영역 분할 함수
+void SplitNewMemory(size_t s, size_t new_size, smheader_ptr new_address, smheader_ptr current);
