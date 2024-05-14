@@ -21,6 +21,11 @@ int main ()
 	smdump();
 	i++;
 
+	sfree(p1); 
+	printf("%d. sfree(%p)\n", i, p1); 
+	smdump();
+	i++;
+
 	p3 = smalloc(1000); // 3
 	printf("%d. smalloc(1000):%p\n", i, p3); 
 	smdump();
