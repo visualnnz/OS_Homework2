@@ -44,23 +44,22 @@ int main ()
 	i++;
 	smdump() ;
 
-	/* for test */
-	// smcoalesce();
-	// printf("smcoalesce()\n") ;
-	// smdump();
-	/* for test */
+	smcoalesce(); // 8
+	printf("%d. smcoalesce()\n", i) ;
+	i++;
+	smdump();
 
-	srealloc(p1, 4000) ; // 8
+	srealloc(p1, 4000) ; // 9
 	printf("%d. srealloc(p1, 4000):%p\n", i, p1) ;
 	i++;
 	smdump() ;
 
-	srealloc(p2, 2500) ; // 9
+	srealloc(p2, 2500) ; // 10
 	printf("%d. srealloc(p2, 2500):%p\n", i, p2) ;
 	i++;
 	smdump() ;
 
-	p6 = smalloc_mode(500, bestfit) ; // 10
+	p6 = smalloc_mode(500, bestfit) ; // 11
 	printf("%d. smalloc_mode(p6, bestfit):%p\n", i, p6) ;
 	i++;
 	smdump() ;

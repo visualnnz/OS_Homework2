@@ -5,7 +5,10 @@
 int main ()
 {
 	void *p1, *p2, *p3, *p4;
-	void *t1, *t2, *t3, *t4, *t5; // for test
+
+	/* **for test** */
+	// void *t1, *t2, *t3, *t4, *t5;
+	/* **for test** */
 
 	int i = 1;
 
@@ -35,6 +38,9 @@ int main ()
 	printf("%d. smalloc(1000):%p\n", i, p4); 
 	smdump();
 	i++;
+
+
+
 
 	// /* **for test** */
 	// t1 = smalloc(1600); // 5
