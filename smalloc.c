@@ -84,6 +84,15 @@ void* smalloc (size_t s)
 	base_address = (void*)new_address + sizeof(smheader); // **주소 연산**
 	SplitNewMemory(s, new_size, new_address, current);
 
+	/** 메모리 병합 로직에서 다시 사용 예정**/
+
+	// 새 메모리 영역을 추가 할당받기 전 기존 메모리 영역의 data region 크기
+	// size_t old_size2 = current->size;
+
+	// current->size = current->size + num_page * page_size; // current->size를 할당 받은 메모리 공간 만큼 더해서 갱신
+	// base_address = (void*)current + sizeof(smheader); // **주소 연산**
+	// SplitNewMemory(s, old_size2, base_address, current, new_address);
+
 	return base_address;
 }
 
@@ -140,7 +149,6 @@ void* smalloc_mode (size_t s, smmode m)
 			case firstfit:
 				if(current->used == 0 && current->size >= s)
 				{
-					target = current;
 					target_size = current->size;
 
 					if(target_size > s + 24) // target_size가 s + 24보다 클 경우 메모리 영역을 2개로 split하고 size를 s로 update
@@ -389,31 +397,6 @@ void* srealloc (void* p, size_t s)
 void smcoalesce ()
 {
 	//TODO
-	smheader_ptr current = smlist;
-	smheader_ptr next = current->next;
-
-	size_t total_size = 0;
-
-	while(next)
-	{
-		if(current->used == 0 && next->used == 0)
-		{
-			total_size = current->size + (sizeof(smheader) + next->size);
-			current->size = total_size;
-			
-			current->next = next->next;
-
-			next->size = 0;
-			next->next = NULL;
-
-			next = current->next;
-		}
-		else
-		{
-			current = current->next;
-			next = next->next;
-		}
-	}
 }
 
 void smdump () 
@@ -514,4 +497,24 @@ void InsertEndMemory(size_t s)
 	}
 
 	SplitNewMemory(s, new_size, new_address, last_header);
+}
+
+// unused data region 병합 함수(추후 로직 재구성 예정)
+void MergeUnused(size_t s, size_t old_size2, void* base_address, smheader_ptr current, smheader_ptr new_address)
+{
+	// old_size = old_size2 + num_page * page_size
+	size_t old_size = current->size;
+
+	current->size = s;
+	current->used = 1;
+
+	base_address = (void *)current + sizeof(smheader); // **주소 연산**
+
+	smheader_ptr old_next = current->next;
+
+	current->next = (void *)new_address + (current->size - old_size2); // **주소 연산**
+
+	(current->next)->size = old_size - current->size - sizeof(smheader);
+	(current->next)->used = 0;
+	(current->next)->next = old_next;
 }
